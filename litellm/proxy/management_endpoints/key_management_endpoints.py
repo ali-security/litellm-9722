@@ -396,6 +396,34 @@ def handle_key_type(data: GenerateKeyRequest, data_json: dict) -> dict:
     return data_json
 
 
+def _check_allowed_routes_caller_permission(
+    allowed_routes: Optional[list],
+    user_api_key_dict: UserAPIKeyAuth,
+) -> None:
+    """
+    Only proxy admins may set `allowed_routes` on a key.
+
+    `allowed_routes` bypasses the standard role-based route gate in
+    RouteChecks.non_proxy_admin_allowed_routes_check, so if a non-admin is
+    allowed to set it they can grant themselves access to any endpoint.
+    Non-admins should use `key_type` to pick a preset route bucket instead.
+    """
+    # Empty list is the default on GenerateKeyRequest — treat as "not set".
+    if not allowed_routes:
+        return
+    if user_api_key_dict.user_role == LitellmUserRoles.PROXY_ADMIN.value:
+        return
+    raise HTTPException(
+        status_code=403,
+        detail={
+            "error": (
+                "Only proxy admins can set `allowed_routes` on a key. "
+                "Use `key_type` to pick a preset route bucket instead."
+            )
+        },
+    )
+
+
 async def validate_team_id_used_in_service_account_request(
     team_id: Optional[str],
     prisma_client: Optional[PrismaClient],
@@ -1098,6 +1126,11 @@ async def generate_key_fn(
             route=KeyManagementRoutes.KEY_GENERATE,
         )
 
+        _check_allowed_routes_caller_permission(
+            allowed_routes=data.allowed_routes,
+            user_api_key_dict=user_api_key_dict,
+        )
+
         if team_table is not None:
             await _check_team_key_limits(
                 team_table=team_table,
@@ -1511,6 +1544,11 @@ async def update_key_fn(
                 status_code=404,
                 detail={"error": f"Team not found, passed team_id={data.team_id}"},
             )
+
+        _check_allowed_routes_caller_permission(
+            allowed_routes=data.allowed_routes,
+            user_api_key_dict=user_api_key_dict,
+        )
 
         ## sanity check - prevent non-proxy admin user from updating key to belong to a different user
         if (

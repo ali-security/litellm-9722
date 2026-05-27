@@ -10,6 +10,7 @@ import asyncio
 import datetime
 import hashlib
 import json
+import os
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
 from urllib.parse import urlparse
@@ -52,6 +53,7 @@ from litellm.proxy._types import (
     UserAPIKeyAuth,
 )
 from litellm.proxy.common_utils.encrypt_decrypt_utils import decrypt_value_helper
+from litellm.constants import MCP_STDIO_ALLOWED_COMMANDS
 from litellm.proxy.utils import ProxyLogging
 from litellm.types.llms.custom_http import httpxSpecialProvider
 from litellm.types.mcp import MCPAuth, MCPStdioConfig
@@ -691,6 +693,18 @@ class MCPServerManager:
 
         # Handle stdio transport
         if transport == MCPTransport.stdio:
+            # Defense-in-depth: block commands not in the allowlist.
+            # The Pydantic validator blocks new servers; this catches legacy
+            # config/DB records predating the allowlist.
+            if server.command:
+                base_command = os.path.basename(server.command)
+                if base_command not in MCP_STDIO_ALLOWED_COMMANDS:
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"MCP stdio command '{server.command}' is not in the allowlist ({sorted(MCP_STDIO_ALLOWED_COMMANDS)}). "
+                        f"Add it to LITELLM_MCP_STDIO_EXTRA_COMMANDS to allow this command.",
+                    )
+
             # For stdio, we need to get the stdio config from the server
             stdio_config: Optional[MCPStdioConfig] = None
             if server.command and server.args is not None:

@@ -1,6 +1,7 @@
 #### CRUD ENDPOINTS for UI Settings #####
 import json
 from typing import Any, Dict, List, Union, Optional
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 
@@ -628,6 +629,29 @@ async def get_ui_theme_settings():
     )
 
 
+def _validate_public_image_url(value: Optional[str], field_name: str) -> None:
+    """
+    Reject anything that isn't a plain http(s) URL with a host. This value is
+    later served via the unauthenticated /get_image endpoint, so local paths
+    like "/etc/passwd" or "file://..." must not be accepted.
+    """
+    if value is None:
+        return
+    if not isinstance(value, str) or not value.strip():
+        return
+    parsed = urlparse(value.strip())
+    if parsed.scheme not in ("http", "https") or not parsed.netloc:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "error": (
+                    f"Invalid {field_name}: must be an http(s) URL with a host. "
+                    "Local filesystem paths and non-http schemes are not allowed."
+                )
+            },
+        )
+
+
 @router.patch(
     "/update/ui_theme_settings",
     tags=["UI Theme Settings"],
@@ -640,6 +664,8 @@ async def update_ui_theme_settings(theme_config: UIThemeConfig):
     """
     from litellm.proxy.proxy_server import proxy_config, store_model_in_db
     import os
+
+    _validate_public_image_url(theme_config.logo_url, "logo_url")
 
     if store_model_in_db is not True:
         raise HTTPException(

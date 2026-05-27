@@ -2,11 +2,12 @@ import importlib
 import traceback
 from typing import Dict, List, Optional, Union
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from litellm._logging import verbose_logger
-from litellm.proxy._types import UserAPIKeyAuth
+from litellm.proxy._types import LitellmUserRoles, UserAPIKeyAuth
 from litellm.proxy.auth.user_api_key_auth import user_api_key_auth
+from litellm.proxy.common_utils.http_parsing_utils import _safe_get_request_headers
 from litellm.types.mcp import MCPAuth
 
 MCP_AVAILABLE: bool = True
@@ -338,11 +339,20 @@ if MCP_AVAILABLE:
 
     @router.post("/test/connection")
     async def test_connection(
-        request: NewMCPServerRequest,
+        request: Request,
+        new_mcp_server_request: NewMCPServerRequest,
+        user_api_key_dict: UserAPIKeyAuth = Depends(user_api_key_auth),
     ):
         """
         Test if we can connect to the provided MCP server before adding it
         """
+        if LitellmUserRoles.PROXY_ADMIN != user_api_key_dict.user_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "User does not have permission to test MCP server connections. Only PROXY_ADMIN users can perform this action."
+                },
+            )
 
         async def _test_connection_operation(client):
             async def _noop(session):
@@ -351,9 +361,11 @@ if MCP_AVAILABLE:
             await client.run_with_session(_noop)
             return {"status": "ok"}
 
-        return await _execute_with_mcp_client(request, _test_connection_operation)
+        return await _execute_with_mcp_client(new_mcp_server_request, _test_connection_operation,
+                raw_headers=_safe_get_request_headers(request),
+            )
 
-    @router.post("/test/tools/list")
+    @router.post("/test/tools/list", dependencies=[Depends(user_api_key_auth)])
     async def test_tools_list(
         request: Request,
         new_mcp_server_request: NewMCPServerRequest,
@@ -362,6 +374,14 @@ if MCP_AVAILABLE:
         """
         Preview tools available from MCP server before adding it
         """
+        if LitellmUserRoles.PROXY_ADMIN != user_api_key_dict.user_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "error": "User does not have permission to test MCP server tools. Only PROXY_ADMIN users can perform this action."
+                },
+            )
+
         from litellm.proxy._experimental.mcp_server.auth.user_api_key_auth_mcp import (
             MCPRequestHandler,
         )

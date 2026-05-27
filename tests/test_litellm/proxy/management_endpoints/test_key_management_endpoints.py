@@ -9,7 +9,7 @@ sys.path.insert(
     0, os.path.abspath("../../../..")
 )  # Adds the parent directory to the system path
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import HTTPException
 
@@ -3374,3 +3374,125 @@ async def test_can_modify_verification_token_personal_key_no_user_id(monkeypatch
     )
 
     assert result is False
+
+
+class TestAllowedRoutesCallerPermission:
+    """
+    Non-admins must not be able to set ``allowed_routes`` on a key.
+    """
+
+    @pytest.mark.asyncio
+    async def test_non_admin_generate_key_with_allowed_routes_rejected(self):
+        from litellm.proxy.management_endpoints.key_management_endpoints import generate_key_fn
+        data = GenerateKeyRequest(
+            key_alias="escalate",
+            allowed_routes=["/*"],
+        )
+        user_api_key_dict = UserAPIKeyAuth(
+            user_id="internal-user-123",
+            user_role=LitellmUserRoles.INTERNAL_USER,
+        )
+        mock_prisma_client = AsyncMock()
+
+        with patch("litellm.proxy.proxy_server.prisma_client", mock_prisma_client), patch(
+            "litellm.proxy.proxy_server.user_api_key_cache", MagicMock()
+        ), patch("litellm.proxy.proxy_server.user_custom_key_generate", None), patch(
+            "litellm.proxy.management_endpoints.key_management_endpoints._common_key_generation_helper",
+            new_callable=AsyncMock,
+            return_value=MagicMock(),
+        ):
+            with pytest.raises(ProxyException) as exc_info:
+                await generate_key_fn(
+                    data=data,
+                    user_api_key_dict=user_api_key_dict,
+                    litellm_changed_by=None,
+                )
+        assert str(exc_info.value.code) == "403"
+        assert "allowed_routes" in str(exc_info.value.message)
+
+    @pytest.mark.asyncio
+    async def test_admin_generate_key_with_allowed_routes_allowed(self):
+        from litellm.proxy.management_endpoints.key_management_endpoints import generate_key_fn
+        data = GenerateKeyRequest(
+            key_alias="admin-key",
+            allowed_routes=["/chat/completions"],
+            user_id="admin-user",
+        )
+        user_api_key_dict = UserAPIKeyAuth(
+            user_id="admin-user",
+            user_role=LitellmUserRoles.PROXY_ADMIN,
+        )
+        mock_prisma_client = AsyncMock()
+        stub_response = MagicMock()
+
+        with patch("litellm.proxy.proxy_server.prisma_client", mock_prisma_client), patch(
+            "litellm.proxy.proxy_server.user_api_key_cache", MagicMock()
+        ), patch("litellm.proxy.proxy_server.user_custom_key_generate", None), patch(
+            "litellm.proxy.management_endpoints.key_management_endpoints._common_key_generation_helper",
+            new_callable=AsyncMock,
+            return_value=stub_response,
+        ):
+            result = await generate_key_fn(
+                data=data,
+                user_api_key_dict=user_api_key_dict,
+                litellm_changed_by=None,
+            )
+        assert result is stub_response
+
+    @pytest.mark.asyncio
+    async def test_non_admin_generate_key_default_empty_allowed_routes_ok(self):
+        from litellm.proxy.management_endpoints.key_management_endpoints import generate_key_fn
+        data = GenerateKeyRequest(key_alias="plain-key")
+        user_api_key_dict = UserAPIKeyAuth(
+            user_id="internal-user-123",
+            user_role=LitellmUserRoles.INTERNAL_USER,
+        )
+        mock_prisma_client = AsyncMock()
+        stub_response = MagicMock()
+
+        with patch("litellm.proxy.proxy_server.prisma_client", mock_prisma_client), patch(
+            "litellm.proxy.proxy_server.user_api_key_cache", MagicMock()
+        ), patch("litellm.proxy.proxy_server.user_custom_key_generate", None), patch(
+            "litellm.proxy.management_endpoints.key_management_endpoints._common_key_generation_helper",
+            new_callable=AsyncMock,
+            return_value=stub_response,
+        ):
+            result = await generate_key_fn(
+                data=data,
+                user_api_key_dict=user_api_key_dict,
+                litellm_changed_by=None,
+            )
+        assert result is stub_response
+
+
+def test_jinja_prompt_manager_is_sandboxed():
+    from jinja2.exceptions import SecurityError
+    from litellm.integrations.dotprompt.prompt_manager import PromptManager
+
+    pm = PromptManager()
+    template = pm.jinja_env.from_string("{{ ''.__class__.__mro__ }}")
+    with pytest.raises(SecurityError):
+        template.render()
+
+
+def test_validate_public_image_url_rejects_local_paths():
+    from litellm.proxy.ui_crud_endpoints.proxy_setting_endpoints import (
+        _validate_public_image_url,
+    )
+
+    for bad in ("/etc/passwd", "file:///etc/passwd", "../../etc/passwd"):
+        with pytest.raises(HTTPException) as exc_info:
+            _validate_public_image_url(bad, "logo_url")
+        assert exc_info.value.status_code == 400
+
+
+def test_validate_public_image_url_accepts_http_and_noop_empty():
+    from litellm.proxy.ui_crud_endpoints.proxy_setting_endpoints import (
+        _validate_public_image_url,
+    )
+
+    _validate_public_image_url("https://example.com/logo.png", "logo_url")
+    _validate_public_image_url("http://cdn.internal/logo.svg", "logo_url")
+    _validate_public_image_url(None, "logo_url")
+    _validate_public_image_url("", "logo_url")
+    _validate_public_image_url("   ", "logo_url")

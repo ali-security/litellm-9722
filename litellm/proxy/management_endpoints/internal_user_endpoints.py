@@ -36,7 +36,7 @@ from litellm.proxy.management_endpoints.key_management_endpoints import (
     prepare_metadata_fields,
 )
 from litellm.proxy.management_helpers.utils import management_endpoint_wrapper
-from litellm.proxy.utils import handle_exception_on_proxy
+from litellm.proxy.utils import handle_exception_on_proxy, hash_password
 from litellm.types.proxy.management_endpoints.common_daily_activity import (
     SpendAnalyticsPaginatedResponse,
 )
@@ -51,6 +51,22 @@ if TYPE_CHECKING:
     from litellm.proxy.proxy_server import PrismaClient
 
 router = APIRouter()
+
+
+def _hash_password_in_dict(data: dict) -> None:
+    """Hash password field in-place if present."""
+    if "password" in data and data["password"] is not None:
+        data["password"] = hash_password(data["password"])
+
+
+def _strip_password_from_response(response) -> None:
+    """Strip password from API response (handles dicts, nested dicts, and Prisma models)."""
+    if isinstance(response, dict):
+        response.pop("password", None)
+        if isinstance(response.get("data"), dict):
+            response["data"].pop("password", None)
+        elif hasattr(response.get("data"), "__dict__"):
+            response["data"].__dict__.pop("password", None)
 
 
 def _update_internal_new_user_params(data_json: dict, data: NewUserRequest) -> dict:
@@ -415,6 +431,7 @@ async def new_user(
 
         data_json = data.json()  # type: ignore
         data_json = _update_internal_new_user_params(data_json, data)
+        _hash_password_in_dict(data_json)
         teams = data.teams
         if teams is None:
             teams = check_if_default_team_set()
@@ -685,6 +702,8 @@ async def user_info(
         _user_info = (
             user_info.model_dump() if isinstance(user_info, BaseModel) else user_info
         )
+        if isinstance(_user_info, dict):
+            _user_info.pop("password", None)
         response_data = UserInfoResponse(
             user_id=user_id, user_info=_user_info, keys=returned_keys, teams=team_list
         )
@@ -872,6 +891,8 @@ async def _update_single_user_helper(
         data_json=data_json, data=user_request
     )
 
+    _hash_password_in_dict(non_default_values)
+
     # Get existing user data for audit logging and metadata preparation
     existing_user_row: Optional[BaseModel] = None
     if user_request.user_id:
@@ -948,6 +969,8 @@ async def _update_single_user_helper(
             response = await prisma_client.insert_data(
                 data=non_default_values, table_name="user"
             )
+            if isinstance(admin_user_info, dict):
+                admin_user_info.pop("password", None)
 
     # Create audit log for successful update
     if response is not None:
@@ -988,6 +1011,7 @@ async def _update_single_user_helper(
             status_code=400,
             detail={"error": "Failed to update user"},
         )
+    _strip_password_from_response(response)
     return response
 
 
