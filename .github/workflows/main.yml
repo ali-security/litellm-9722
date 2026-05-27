@@ -2,17 +2,16 @@ name: Publish Dev Release to PyPI
 
 on:
   workflow_dispatch:
-  
 jobs:
   publish-dev-release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: MatteoH2O1999/setup-python@v4
         with:
           python-version: 3.8  # Adjust the Python version as needed
 
@@ -31,4 +30,4 @@ jobs:
           set -e
           if twine check --repository-url https://pypi.org/simple/ "litellm==$LITELLM_VERSION" >/dev/null 2>&1; then
             echo "Version $LITELLM_VERSION already exists on PyPI. Skipping publish."
-     
+

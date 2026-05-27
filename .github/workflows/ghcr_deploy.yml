@@ -4,13 +4,13 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "The tag version you want to build"
+        description: The tag version you want to build
       release_type:
-        description: "The release type you want to build. Can be 'latest', 'stable', 'dev', 'rc'"
+        description: The release type you want to build. Can be 'latest', 'stable', 'dev', 'rc'
         type: string
-        default: "latest"
+        default: latest
       commit_hash:
-        description: "Commit hash"
+        description: Commit hash
         required: true
 
 # Defines two custom environment variables for the workflow. Used for the Container registry domain, and a name for the Docker image that this workflow builds.
@@ -23,7 +23,7 @@ env:
 jobs:
   # print commit hash, tag, and release type
   print:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - run: |
           echo "Commit hash: ${{ github.event.inputs.commit_hash }}"
@@ -31,50 +31,42 @@ jobs:
           echo "Release type: ${{ github.event.inputs.release_type }}"
   docker-hub-deploy:
     if: github.repository == 'BerriAI/litellm'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
-      -
-        name: Checkout
+      - name: Checkout
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.inputs.commit_hash }}
-      -
-        name: Set up QEMU
+      - name: Set up QEMU
         uses: docker/setup-qemu-action@v3
-      -
-        name: Set up Docker Buildx
+      - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      -
-        name: Login to Docker Hub
+      - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-      -
-        name: Build and push
+      - name: Build and push
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: litellm/litellm:${{ github.event.inputs.tag || 'latest' }} 
-      -
-        name: Build and push litellm-database image
+          tags: litellm/litellm:${{ github.event.inputs.tag || 'latest' }}
+      - name: Build and push litellm-database image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           file: ./docker/Dockerfile.database
           tags: litellm/litellm-database:${{ github.event.inputs.tag || 'latest' }}
-      -
-        name: Build and push litellm-spend-logs image
+      - name: Build and push litellm-spend-logs image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
           file: ./litellm-js/spend-logs/Dockerfile
           tags: litellm/litellm-spend_logs:${{ github.event.inputs.tag || 'latest' }}
-      -
-        name: Build and push litellm-non_root image
+      - name: Build and push litellm-non_root image
         uses: docker/build-push-action@v5
         with:
           context: .
@@ -82,7 +74,7 @@ jobs:
           file: ./docker/Dockerfile.non_root
           tags: litellm/litellm-non_root:${{ github.event.inputs.tag || 'latest' }}
   build-and-push-image:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     # Sets the permissions granted to the `GITHUB_TOKEN` for the actions in this job.
     permissions:
       contents: read
@@ -126,9 +118,9 @@ jobs:
             ${{ (github.event.inputs.release_type == 'stable'  || github.event.inputs.release_type == 'rc') && format('{0}/berriai/litellm:{1}', env.REGISTRY, github.event.inputs.tag) || '' }},
           labels: ${{ steps.meta.outputs.labels }}
           platforms: local,linux/amd64,linux/arm64,linux/arm64/v8
-  
+
   build-and-push-image-ee:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -169,9 +161,9 @@ jobs:
             ${{ github.event.inputs.release_type == 'stable' && format('{0}/berriai/litellm-ee:main-stable', env.REGISTRY) || '' }}
           labels: ${{ steps.meta-ee.outputs.labels }}
           platforms: local,linux/amd64,linux/arm64,linux/arm64/v8
-   
+
   build-and-push-image-database:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -212,9 +204,9 @@ jobs:
             ${{ github.event.inputs.release_type == 'stable' && format('{0}/berriai/litellm-database:main-stable', env.REGISTRY) || '' }}
           labels: ${{ steps.meta-database.outputs.labels }}
           platforms: local,linux/amd64,linux/arm64,linux/arm64/v8
-            
+
   build-and-push-image-non_root:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -253,11 +245,11 @@ jobs:
             ${{ steps.meta-non_root.outputs.tags }}-${{ github.event.inputs.release_type }}
             ${{ (github.event.inputs.release_type == 'stable'  || github.event.inputs.release_type == 'rc') && format('{0}/berriai/litellm-non_root:main-{1}', env.REGISTRY, github.event.inputs.tag) || '' }},
             ${{ github.event.inputs.release_type == 'stable' && format('{0}/berriai/litellm-non_root:main-stable', env.REGISTRY) || '' }}
-          labels: ${{ steps.meta-non_root.outputs.labels }} 
+          labels: ${{ steps.meta-non_root.outputs.labels }}
           platforms: local,linux/amd64,linux/arm64,linux/arm64/v8
-  
+
   build-and-push-image-spend-logs:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     permissions:
       contents: read
       packages: write
@@ -301,7 +293,7 @@ jobs:
   build-and-push-helm-chart:
     if: github.event.inputs.release_type  != 'dev'
     needs: [docker-hub-deploy, build-and-push-image, build-and-push-image-database]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -318,7 +310,7 @@ jobs:
       - name: lowercase github.repository_owner
         run: |
           echo "REPO_OWNER=`echo ${{github.repository_owner}} | tr '[:upper:]' '[:lower:]'`" >>${GITHUB_ENV}
-    
+
       - name: Get LiteLLM Latest Tag
         id: current_app_tag
         shell: bash
@@ -351,7 +343,7 @@ jobs:
         uses: christian-draeger/increment-semantic-version@1.1.0
         with:
           current-version: ${{ steps.current_version.outputs.current-version || '0.1.0' }}
-          version-fragment: 'bug'
+          version-fragment: bug
 
       # Add suffix for non-stable releases (semantic versioning)
       - name: Calculate chart version with prerelease suffix
@@ -379,22 +371,21 @@ jobs:
           update_dependencies: true
 
   release:
-    name: "New LiteLLM Release"
+    name: New LiteLLM Release
     needs: [docker-hub-deploy, build-and-push-image, build-and-push-image-database]
 
-    runs-on: "ubuntu-latest"
-   
+    runs-on: ubuntu-24.04
     steps:
       - name: Display version
         run: echo "Current version is ${{ github.event.inputs.tag }}"
-      - name: "Set Release Tag"
+      - name: Set Release Tag
         run: echo "RELEASE_TAG=${{ github.event.inputs.tag }}" >> $GITHUB_ENV
       - name: Display release tag
         run: echo "RELEASE_TAG is $RELEASE_TAG"
-      - name: "Create release"
-        uses: "actions/github-script@v6"
+      - name: Create release
+        uses: actions/github-script@v6
         with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             const commitHash = "${{ github.event.inputs.commit_hash}}";
             console.log("Commit Hash:", commitHash); // Add this line for debugging
@@ -409,7 +400,7 @@ jobs:
                 repo: context.repo.repo,
                 tag_name: process.env.RELEASE_TAG,
               });
-      
+
               core.exportVariable('RELEASE_ID', response.data.id);
               core.exportVariable('RELEASE_UPLOAD_URL', response.data.upload_url);
             } catch (error) {
@@ -419,7 +410,7 @@ jobs:
         id: release-notes
         uses: actions/github-script@v6
         with:
-          github-token: "${{ secrets.GITHUB_TOKEN }}"
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
             try {
               const response = await github.rest.repos.getRelease({

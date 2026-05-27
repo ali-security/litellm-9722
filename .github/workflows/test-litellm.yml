@@ -2,11 +2,11 @@ name: LiteLLM Mock Tests (folder - tests/test_litellm)
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main, master]
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
 
     steps:
@@ -18,7 +18,7 @@ jobs:
         echo "Your PR is being tested now. We appreciate your help in making LiteLLM better!" >> $GITHUB_STEP_SUMMARY
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: MatteoH2O1999/setup-python@v4
       with:
         python-version: '3.12'
 

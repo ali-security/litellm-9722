@@ -5,16 +5,17 @@ on:
     branches:
       - main  # Change this to the default branch of your repository
 
+      - master
 jobs:
   read-version:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: MatteoH2O1999/setup-python@v4
         with:
           python-version: 3.8  # Adjust the Python version as needed
 

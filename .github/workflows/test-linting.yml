@@ -2,11 +2,11 @@ name: LiteLLM Linting
 
 on:
   pull_request:
-    branches: [ main ]
+    branches: [main, master]
 
 jobs:
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
 
     steps:
@@ -16,7 +16,7 @@ jobs:
         clean: true
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: MatteoH2O1999/setup-python@v4
       with:
         python-version: '3.12'
 
@@ -48,7 +48,7 @@ jobs:
         git log --oneline -3
         echo "File content around line 43:"
         head -50 litellm/litellm_core_utils/custom_logger_registry.py | tail -10
-        
+
     - name: Run Ruff linting
       run: |
         cd litellm
@@ -72,5 +72,5 @@ jobs:
         cd ..
 
     - name: Check import safety
-      run: |
+      run: |-
         poetry run python -c "from litellm import *" || (echo '🚨 import failed, this means you introduced unprotected imports! 🚨'; exit 1)

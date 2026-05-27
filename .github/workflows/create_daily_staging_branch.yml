@@ -1,13 +1,11 @@
 name: Create Daily Staging Branch
 
 on:
-  schedule:
-    - cron: '0 0 * * *'  # Runs daily at midnight UTC
   workflow_dispatch:  # Allow manual trigger
 
 jobs:
   create-staging-branch:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
 
     steps:
       - name: Checkout repository

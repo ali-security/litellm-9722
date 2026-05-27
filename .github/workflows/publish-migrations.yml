@@ -7,13 +7,14 @@ permissions:
 on:
   push:
     paths:
-      - 'schema.prisma'  # Check root schema.prisma
+      - schema.prisma    # Check root schema.prisma
     branches:
       - main
 
+      - master
 jobs:
   publish-migrations:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     services:
       postgres:
         image: postgres:14
@@ -28,7 +29,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
-      
+
       # Add shadow database service
       postgres_shadow:
         image: postgres:14
@@ -48,9 +49,9 @@ jobs:
       - uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: MatteoH2O1999/setup-python@v4
         with:
-          python-version: '3.x'
+          python-version: 3.x
 
       - name: Install Dependencies
         run: |
@@ -59,13 +60,13 @@ jobs:
 
       - name: Generate Initial Migration if None Exists
         env:
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/temp_db"
-          DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/temp_db"
-          SHADOW_DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/shadow_db"
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/temp_db
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/temp_db
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/shadow_db
         run: |
           mkdir -p deploy/migrations
           echo 'provider = "postgresql"' > deploy/migrations/migration_lock.toml
-          
+
           if [ -z "$(ls -A deploy/migrations/2* 2>/dev/null)" ]; then
             echo "No existing migrations found, creating baseline..."
             VERSION=$(date +%Y%m%d%H%M%S)
@@ -113,25 +114,25 @@ jobs:
       - name: Compare and Generate Migration
         if: success()
         env:
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/temp_db"
-          DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/temp_db"
-          SHADOW_DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/shadow_db"
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/temp_db
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/temp_db
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/shadow_db
         run: |
           # Create temporary migration workspace
           mkdir -p temp_migrations
-          
+
           # Copy existing migrations (will not fail if directory is empty)
           cp -r deploy/migrations/* temp_migrations/ 2>/dev/null || true
-          
+
           VERSION=$(date +%Y%m%d%H%M%S)
-          
+
           # Generate diff against existing migrations or empty state
           prisma migrate diff \
             --from-migrations temp_migrations \
             --to-schema-datamodel schema.prisma \
             --shadow-database-url "${SHADOW_DATABASE_URL}" \
             --script > temp_migrations/migration_${VERSION}.sql
-          
+
           # Check if there are actual changes
           if [ -s temp_migrations/migration_${VERSION}.sql ]; then
             echo "Changes detected, creating new migration"
@@ -146,13 +147,13 @@ jobs:
       - name: Verify Migration
         if: success()
         env:
-          DATABASE_URL: "postgresql://postgres:postgres@localhost:5432/temp_db"
-          DIRECT_URL: "postgresql://postgres:postgres@localhost:5432/temp_db"
-          SHADOW_DATABASE_URL: "postgresql://postgres:postgres@localhost:5433/shadow_db"
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/temp_db
+          DIRECT_URL: postgresql://postgres:postgres@localhost:5432/temp_db
+          SHADOW_DATABASE_URL: postgresql://postgres:postgres@localhost:5433/shadow_db
         run: |
           # Create test database
           psql "${SHADOW_DATABASE_URL}" -c 'CREATE DATABASE migration_test;'
-          
+
           # Apply all migrations in order to verify
           for migration in deploy/migrations/*/migration.sql; do
             echo "Applying migration: $migration"
@@ -166,7 +167,7 @@ jobs:
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github.v3+json" \
                https://api.github.com/repos/BerriAI/litellm/collaborators
-          
+
           echo "\nChecking if token can create PRs..."
           curl -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
                -H "Accept: application/vnd.github.v3+json" \
@@ -177,7 +178,7 @@ jobs:
         run: |
           echo "Files staged for commit:"
           git diff --name-status --staged
-          
+
           echo "\nAll changed files:"
           git status
 
@@ -186,11 +187,11 @@ jobs:
         uses: peter-evans/create-pull-request@v5
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          commit-message: "chore: update prisma migrations"
-          title: "Update Prisma Migrations"
+          commit-message: 'chore: update prisma migrations'
+          title: Update Prisma Migrations
           body: |
             Auto-generated migration based on schema.prisma changes.
-            
+
             Generated files:
             - deploy/migrations/${VERSION}_schema_update/migration.sql
             - deploy/migrations/${VERSION}_schema_update/README.md
